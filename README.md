@@ -1,193 +1,257 @@
 # VisionQuery
 
-VisionQuery is a lightweight **text-to-image semantic search system** built as a backend-first MVP.  
-It demonstrates how to serve a pretrained multimodal model behind an API, index image embeddings, and perform similarity search — all in a clean, containerized setup.
+**VisionQuery** is a lightweight **text-to-image semantic search** system that serves a pretrained multimodal model behind an API, indexes image embeddings, and returns ranked results via cosine similarity.
 
-The project intentionally prioritizes **clarity, correctness, and explainability** over scale.
-
----
-
-## What VisionQuery Does
-
-VisionQuery allows users to:
-
-1. **Ingest images** into an embedding index
-2. **Query using natural language**
-3. **Retrieve semantically similar images** ranked by similarity score
-
-Both text and images are embedded into the **same vector space** using a pretrained CLIP model, enabling cross‑modal search without any custom training.
+It’s a backend-first MVP focused on **clarity and explainability**: simple vector storage, clean endpoints, containerized dev, and basic observability.
 
 ---
 
-## High-Level Architecture
+## What it does
 
-```
-Client (curl / browser / frontend)
-        ↓
-FastAPI Backend
-        ↓
-CLIP Embedder (text + image)
-        ↓
-In-Memory Vector Store (cosine similarity)
-        ↓
-Ranked Search Results
-```
-
-### Key Design Choices
-- **FastAPI** for a simple, fast HTTP API
-- **Pretrained CLIP model** for multimodal embeddings
-- **In-memory vector store** for simplicity and rapid iteration
-- **Docker + Docker Compose** for reproducible local development
-- **Lazy model loading** to ensure fast startup and reliable health checks
+- **Ingest images** into an embedding index
+- **Embed text + images** into the same CLIP vector space
+- **Search by natural language** and retrieve the most similar images
+- **Expose metrics** for monitoring (Prometheus-compatible)
 
 ---
 
-## Project Structure
+## Architecture
 
+### High-level system
+
+```mermaid
+flowchart LR
+  C[Client
+curl / UI] -->|HTTP| API[FastAPI Backend]
+
+  API --> E[CLIP Embedder
+text + image]
+  API --> VS[Vector Store
+(in-memory, cosine)]
+
+  API -->|/metrics| P[Prometheus]
+  P --> G[Grafana]
+
+  subgraph Data
+    IMG[(Local Images
+/data/images)]
+  end
+
+  IMG -->|ingest path| API
+  E -->|embeddings| VS
+  VS -->|top-k results| API
 ```
-visionquery/
+
+### Request flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User
+  participant A as FastAPI
+  participant M as CLIP Embedder
+  participant V as Vector Store
+
+  U->>A: POST /ingest/image {path}
+  A->>M: embed(image)
+  M-->>A: image_embedding
+  A->>V: add(image_embedding, metadata)
+  A-->>U: {status: ok}
+
+  U->>A: POST /search {query, top_k}
+  A->>M: embed(text)
+  M-->>A: text_embedding
+  A->>V: cosine_search(text_embedding, top_k)
+  V-->>A: ranked_results
+  A-->>U: results + similarity scores
+```
+
+---
+
+## Tech stack
+
+- **API:** FastAPI
+- **Embeddings:** pretrained CLIP (text + image)
+- **Search:** in-memory vector store (cosine similarity)
+- **Observability:** Prometheus + Grafana
+- **Infra:** Docker + Docker Compose
+
+---
+
+## Repository layout
+
+> This is the *meaningful* layout (excluding `node_modules/`, build artifacts, etc.).
+
+```text
+VisionQuery/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py          # API routes, orchestration, metrics
-│   │   ├── embeddings.py    # Text + image embedding logic (CLIP)
-│   │   └── vector_store.py  # In-memory similarity search
+│   │   ├── main.py          # API routes + orchestration + metrics
+│   │   ├── embeddings.py    # CLIP embedding (text + image)
+│   │   └── vector_store.py  # in-memory similarity search
 │   ├── Dockerfile
 │   └── requirements.txt
-├── frontend/                # Simple React UI (optional)
+├── frontend/                # optional React UI
 ├── data/
-│   └── images/              # Local image data (not tracked)
+│   └── images/              # local images (not tracked)
 ├── monitoring/
 │   └── prometheus/
-│       └── prometheus.yml   # Prometheus scrape configuration
+│       └── prometheus.yml   # Prometheus scrape config
 ├── docker-compose.yml
 └── README.md
 ```
 
 ---
 
-## API Endpoints
+## API
 
-### Health Check
-**GET** `/health`
+### Health
+`GET /health`
 
-Used by Docker and monitoring tools to verify the service is running.
+Returns a simple status payload for Docker + monitoring checks.
 
-```json
-{ "status": "ok" }
-```
+### Ingest image
+`POST /ingest/image`
 
----
-
-### Ingest Image
-**POST** `/ingest/image`
-
-Indexes an image by generating and storing its embedding.
+Body:
 
 ```json
-{
-  "path": "data/images/example.jpg"
-}
+{ "path": "data/images/example.jpg" }
 ```
 
----
+Embeds the image and stores its vector + metadata in the in-memory index.
 
 ### Search
-**POST** `/search`
+`POST /search`
 
-Searches indexed images using a natural language query.
+Body:
 
 ```json
-{
-  "query": "a red car on the street",
-  "top_k": 5
-}
+{ "query": "a red car on the street", "top_k": 5 }
 ```
 
-Returns ranked results with similarity scores.
-
----
+Returns the top-k most similar images with cosine similarity scores.
 
 ### Metrics
-**GET** `/metrics`
+`GET /metrics`
 
-Exposes Prometheus-compatible metrics for:
-- Request counts
-- Request latency
+Prometheus-compatible metrics (request counts, latency).
 
 ---
 
-## Running the Project
+## Quickstart (Docker)
 
 ### Prerequisites
+
 - Docker
 - Docker Compose
 
-### Start All Services
-From the project root:
+### Run everything
+
+From the repo root:
 
 ```bash
 docker compose up --build
 ```
 
-### Available Services
-- **Backend API:** http://localhost:8000  
-- **Frontend UI:** http://localhost:5173  
-- **Prometheus:** http://localhost:9090  
-- **Grafana:** http://localhost:3000 (admin / admin)
+### Services
+
+- **Backend API:** http://localhost:8000
+- **Frontend UI:** http://localhost:5173
+- **Prometheus:** http://localhost:9090
+- **Grafana:** http://localhost:3000 (default: admin / admin)
+
+### Stop
+
+```bash
+docker compose down
+```
+
+### Reset (including volumes)
+
+```bash
+docker compose down -v
+```
 
 ---
 
-## Observability
+## Local development (without Docker)
 
-VisionQuery includes basic observability out of the box:
+> Docker is recommended for consistent infra. Use local runs for faster iteration.
 
-- **Prometheus** scrapes backend metrics
-- **Grafana** visualizes request volume and latency
-- Metrics are collected automatically via FastAPI middleware
+### Backend
 
-This mirrors how production ML services are monitored in practice.
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Frontend (optional)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 ---
 
-## Development Notes
+## Usage examples
 
-- The CLIP model is **lazy-loaded** on first request to avoid slow container startup.
-- Embeddings are stored in memory for simplicity.
-- The vector store is intentionally minimal and easy to replace.
+### Ingest an image
+
+```bash
+curl -X POST http://localhost:8000/ingest/image \
+  -H "Content-Type: application/json" \
+  -d '{"path":"data/images/example.jpg"}'
+```
+
+### Search
+
+```bash
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"a dog on a beach","top_k":5}'
+```
 
 ---
 
-## Limitations (Intentional)
+## Notes and design choices
 
-This project is an MVP and not production-hardened:
+- **Lazy model loading**: the CLIP model loads on first request to keep container startup fast and health checks reliable.
+- **In-memory index**: simple to understand and easy to swap later (FAISS / pgvector).
+- **Backend-first**: the core deliverable is a clean API and system design; the UI is optional.
 
-- No persistent storage (index resets on restart)
-- No authentication or access control
+---
+
+## Limitations (intentional)
+
+- Index resets on restart (no persistent vector store)
+- No authentication / access control
 - No batching or async inference
-- No large-scale vector indexing
+- Not tuned for large-scale indexing
 
-These were deliberate tradeoffs to keep the system easy to reason about and explain.
-
----
-
-## Possible Extensions
-
-- Replace in-memory store with FAISS or pgvector
-- Add persistent metadata storage
-- Improve frontend UX
-- Add request tracing and error dashboards
-- Batch or async inference for higher throughput
+These tradeoffs keep the system small, explainable, and interview-friendly.
 
 ---
 
-## Why This Project Exists
+## Possible extensions
 
-VisionQuery was built to practice and demonstrate:
+- Replace the in-memory store with **FAISS** or **pgvector**
+- Persist metadata + vectors in a database
+- Add image upload support (instead of file paths)
+- Add tracing + richer dashboards
+- Batch embedding + async job queue for higher throughput
 
-- Designing clean APIs around ML models
-- Structuring ML systems for reliability
-- Containerized development workflows
-- Adding observability to backend services
-- Explaining ML infrastructure clearly in interviews
+---
 
-The scope is intentionally limited so every component can be understood end-to-end.
+## References
+
+- CLIP (OpenAI): Learning Transferable Visual Models From Natural Language Supervision
+- FastAPI documentation
+- Prometheus instrumentation + exposition formats
+- Grafana documentation
+- Docker Compose documentation
