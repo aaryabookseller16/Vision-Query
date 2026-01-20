@@ -1,0 +1,38 @@
+version: "3.9"
+
+# docker-compose.yml
+#
+# Purpose:
+# - Run the VisionQuery backend as a container with one command
+# - Make local development reproducible (same ports, same command, same env)
+services:
+  backend:
+    # Build the backend image from ./backend (uses backend/Dockerfile)
+    build:
+      context: ./backend
+
+    # Name is helpful when debugging (docker logs visionquery-backend)
+    container_name: visionquery-backend
+
+    # Expose container port 8000 to your machine at port 8000
+    ports:
+      - "8000:8000"
+
+    # Mount code into the container for fast iteration during development
+    # NOTE: if you're using this, you usually run uvicorn with --reload
+    # We keep it mounted anyway so edits reflect immediately for Python files.
+    volumes:
+      - ./backend/app:/app/app
+      - ./data:/app/data
+
+    # Environment variables live here (keeps code clean)
+    # We'll use these later when we add configurable paths / settings.
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    # Simple health check so you can see if the container is up
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
