@@ -1,91 +1,63 @@
 """
 vector_store.py
 
-This file implements a simple in-memory vector store.
+Simple in-memory vector store.
 
-Goal:
-- Store embeddings (vectors) for images
-- Search for the most similar vectors given a query vector
-
-Why keep it simple:
-- For an MVP, an in-memory store is the fastest way to get end-to-end search working.
-- It's easy to understand and debug.
-- Later, this module can be swapped out for FAISS / pgvector / Pinecone / etc
-  without changing the API layer (main.py) much.
-
-Key idea:
-- We use cosine similarity to rank results.
-- Metadata is stored alongside each vector (e.g., image path).
+Stores (path -> embedding) and supports cosine similarity search.
+Cosine sim becomes dot product after L2 normalization.
 """
 
-from typing import Dict, List, Tuple
+from dataclasses import dataclass
+from threading import Lock
+from typing import List
+
 import numpy as np
 
 
+@dataclass(frozen=True)
+class SearchResult:
+    path: str
+    score: float
+
+
 class VectorStore:
-    """
-    In-memory store for vectors + metadata.
+    def __init__(self) -> None:
+        self._paths: List[str] = []
+        self._embs: np.ndarray | None = None
+        self._lock = Lock()
 
-    Stored state:
-    - self.vectors: list of numpy arrays (each is a vector embedding)
-    - self.metadata: list of dicts, one per vector (same index as vectors)
-    """
+    def __len__(self) -> int:
+        return len(self._paths)
 
-    def __init__(self):
-        self.vectors: List[np.ndarray] = []
-        self.metadata: List[Dict] = []
+    @staticmethod
+    def _l2_normalize(v: np.ndarray) -> np.ndarray:
+        v = v.astype(np.float32, copy=False)
+        norm = np.linalg.norm(v)
+        if norm == 0:
+            return v
+        return v / norm
 
-    def add(self, vector: List[float], meta: Dict) -> None:
-        """
-        Add a new vector + metadata into the store.
+    def add(self, path: str, embedding: np.ndarray) -> None:
+        emb = self._l2_normalize(np.asarray(embedding))
 
-        Args:
-            vector: embedding as a Python list (float values)
-            meta:   arbitrary metadata (ex: {"path": "...", "id": 123})
+        with self._lock:
+            self._paths.append(path)
+            if self._embs is None:
+                self._embs = emb.reshape(1, -1)
+            else:
+                self._embs = np.vstack([self._embs, emb.reshape(1, -1)])
 
-        Notes:
-            We store vectors as numpy arrays because it's convenient for math ops.
-        """
-        self.vectors.append(np.array(vector, dtype=np.float32))
-        self.metadata.append(meta)
+    def search(self, query_embedding: np.ndarray, top_k: int = 5) -> List[SearchResult]:
+        q = self._l2_normalize(np.asarray(query_embedding))
 
-    def search(self, query_vector: List[float], top_k: int = 5) -> List[Tuple[float, Dict]]:
-        """
-        Search for the most similar vectors.
+        with self._lock:
+            if self._embs is None or len(self._paths) == 0:
+                return []
 
-        Args:
-            query_vector: embedding of the user query
-            top_k: number of results to return
+            scores = self._embs @ q
+            k = max(1, min(int(top_k), scores.shape[0]))
 
-        Returns:
-            List of (score, metadata) tuples sorted by highest similarity.
+            idx = np.argpartition(-scores, kth=k - 1)[:k]
+            idx = idx[np.argsort(-scores[idx])]
 
-        Similarity metric:
-            cosine_similarity(a, b) = dot(a,b) / (||a|| * ||b||)
-
-        We use cosine similarity because CLIP embeddings are typically compared this way.
-        """
-        if not self.vectors:
-            return []
-
-        q = np.array(query_vector, dtype=np.float32)
-
-        # Precompute query norm once for efficiency
-        q_norm = np.linalg.norm(q)
-        if q_norm == 0:
-            return []
-
-        results: List[Tuple[float, Dict]] = []
-
-        for vec, meta in zip(self.vectors, self.metadata):
-            v_norm = np.linalg.norm(vec)
-            if v_norm == 0:
-                continue
-
-            score = float(np.dot(q, vec) / (q_norm * v_norm))
-            results.append((score, meta))
-
-        # Sort by similarity score descending (best match first)
-        results.sort(key=lambda x: x[0], reverse=True)
-
-        return results[:top_k]
+            return [SearchResult(path=self._paths[i], score=float(scores[i])) for i in idx]

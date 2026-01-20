@@ -18,3 +18,4 @@ torch
 transformers
 pillow
 numpy
+prometheus-client
