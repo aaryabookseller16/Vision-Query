@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 # Local modules that handle embeddings and vector search logic
@@ -8,6 +9,15 @@ from app.vector_store import VectorStore
 # Initialize the FastAPI application
 # This file acts as the orchestration layer for the system
 app = FastAPI(title="VisionQuery API")
+
+# Add CORS middleware to allow React dev server access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Load the embedding model once at startup
 # This avoids reloading the model on every request, which would be expensive
