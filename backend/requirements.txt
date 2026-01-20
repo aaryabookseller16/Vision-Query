@@ -1,5 +1,20 @@
+# requirements.txt
+#
+# Purpose:
+# - Define the Python dependencies needed to run the VisionQuery backend.
+# - Keeping this file pinned (exact versions) makes builds reproducible:
+#   same dependencies locally, in CI, and inside Docker.
+#
+# Notes:
+# - FastAPI + Uvicorn power the API server.
+# - transformers + torch provide the pretrained CLIP model for embeddings.
+# - pillow is used to load images from disk safely.
+# - numpy is used for cosine similarity in the in-memory vector store.
+
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
+
 torch
 transformers
 pillow
+numpy
