@@ -21,20 +21,16 @@ It’s a backend-first MVP focused on **clarity and explainability**: simple vec
 
 ```mermaid
 flowchart LR
-  C[Client
-curl / UI] -->|HTTP| API[FastAPI Backend]
+  C[Client<br/>curl / UI] -->|HTTP| API[FastAPI Backend]
 
-  API --> E[CLIP Embedder
-text + image]
-  API --> VS[Vector Store
-(in-memory, cosine)]
+  API --> E[CLIP Embedder<br/>text + image]
+  API --> VS[Vector Store<br/>in-memory cosine]
 
   API -->|/metrics| P[Prometheus]
   P --> G[Grafana]
 
   subgraph Data
-    IMG[(Local Images
-/data/images)]
+    IMG[(Local Images<br/>/data/images)]
   end
 
   IMG -->|ingest path| API
@@ -52,13 +48,13 @@ sequenceDiagram
   participant M as CLIP Embedder
   participant V as Vector Store
 
-  U->>A: POST /ingest/image {path}
+  U->>A: POST /ingest/image (path)
   A->>M: embed(image)
   M-->>A: image_embedding
   A->>V: add(image_embedding, metadata)
   A-->>U: {status: ok}
 
-  U->>A: POST /search {query, top_k}
+  U->>A: POST /search (query, top_k)
   A->>M: embed(text)
   M-->>A: text_embedding
   A->>V: cosine_search(text_embedding, top_k)
