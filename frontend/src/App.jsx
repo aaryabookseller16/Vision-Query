@@ -1,5 +1,4 @@
 import { useState } from "react";
-import axios from "axios";
 
 /**
  * App.jsx
@@ -15,7 +14,25 @@ import axios from "axios";
  * - easy to extend later (image upload, ingest, etc.)
  */
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "/api";
+
+async function ingestImage(path) {
+  const res = await fetch(`${API_BASE}/ingest/image`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return res.json();
+}
+
+async function search(query, top_k) {
+  const res = await fetch(`${API_BASE}/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, top_k }),
+  });
+  return res.json();
+}
 
 export default function App() {
   const [query, setQuery] = useState("");
@@ -37,21 +54,17 @@ export default function App() {
     try {
       setLoading(true);
 
-      // Call FastAPI: POST /search { query: "..." }
-      // Backend returns: { results: [{ path, score }, ...] }
-      const resp = await axios.post(`${API_BASE}/search`, {
-        query: query.trim(),
-        top_k: Number(topK), // backend may ignore for now; safe to send
-      });
+      // Call backend search helper (uses fetch under the hood)
+      const data = await search(query.trim(), Number(topK));
 
-      setResults(resp.data?.results ?? []);
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
+
+      setResults(data.results ?? []);
     } catch (err) {
-      // Keep errors user-friendly (don’t dump a stack trace to the UI)
-      const msg =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Something went wrong calling the API.";
-      setError(msg);
+      setError(err?.message || "Something went wrong calling the API.");
     } finally {
       setLoading(false);
     }

@@ -40,3 +40,106 @@
 .read-the-docs {
   color: #888;
 }
+
+/* App.css
+ *
+ * Purpose:
+ * - Provide simple, clean styling for the VisionQuery MVP UI.
+ * - Keep styling minimal so the UI is readable during interviews/demo.
+ * - Avoid the default Vite "logo" template styles.
+ */
+
+/* Make sizing predictable */
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  line-height: 1.5;
+}
+
+/* Page background + readable text */
+body {
+  margin: 0;
+  background: #fafafa;
+  color: #111;
+}
+
+/* Center the app and keep it readable */
+#root {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 16px;
+}
+
+/* Headings */
+h1 {
+  margin: 0 0 6px 0;
+}
+
+p {
+  margin: 0 0 16px 0;
+}
+
+/* Search form layout */
+form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+input {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #111;
+}
+
+input:focus {
+  outline: none;
+  border-color: #555;
+}
+
+/* Main text input should expand */
+input[type="text"] {
+  flex: 1;
+}
+
+/* Buttons */
+button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Results section */
+ul {
+  padding-left: 18px;
+}
+
+li {
+  margin-bottom: 10px;
+}
+
+/* Error text */
+.error {
+  margin-top: 12px;
+  color: crimson;
+}
+
+/* Small footer text */
+.small {
+  margin-top: 24px;
+  opacity: 0.7;
+  font-size: 12px;
+}

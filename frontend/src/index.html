@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!--
+      frontend/src/index.html
+
+      Purpose:
+      - This is the HTML "shell" for the React app.
+      - React mounts into the <div id="root"></div> below.
+      - Vite injects the compiled JS bundle during dev/build.
+
+      Notes:
+      - Keep this file minimal.
+      - Any UI should live in React components, not in this HTML.
+    -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Basic metadata -->
+    <title>VisionQuery</title>
+    <meta name="description" content="VisionQuery — text-to-image search (MVP)" />
+  </head>
+
+  <body>
+    <!-- React mounts the app here -->
+    <div id="root"></div>
+
+    <!-- Entry point for the React app -->
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
