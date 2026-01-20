@@ -1,0 +1,61 @@
+# ======================
+# OS / Editor
+# ======================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ======================
+# Python
+# ======================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+env/
+backend/.venv/
+
+# ======================
+# Python tooling
+# ======================
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ======================
+# Node / React
+# ======================
+node_modules/
+dist/
+build/
+*.log
+
+# ======================
+# Docker
+# ======================
+docker-compose.override.yml
+
+# ======================
+# Data / ML artifacts (keep empty dirs via .gitkeep)
+# ======================
+data/images/*
+!data/images/.gitkeep
+
+# ======================
+# Secrets
+# ======================
+.env.local
+.env.production
+.env.dev
+.env.test
+
+# ======================
+# Misc
+# ======================
+tmp/
+.cache/
