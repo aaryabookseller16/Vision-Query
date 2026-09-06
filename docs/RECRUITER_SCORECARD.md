@@ -1,7 +1,7 @@
 # MANGO Recruiter Scorecard
 
 Review date: 2026-09-06  
-Release candidate: pending final CI rerun  
+Release status: approved  
 Decision standard: every category must score at least 4/5, total at least 26/30, and no unresolved critical defect.
 
 ## Score
@@ -15,12 +15,12 @@ Decision standard: every category must score at least 4/5, total at least 26/30,
 | UI, accessibility, and product judgment | 4.5/5 | Distinctive, restrained editorial direction with a clear search-first task flow. | Responsive grid, semantic controls, visible focus, reduced motion, empty states, image dialog, local assets. |
 | Documentation and deployment readiness | 4.5/5 | Claims are explicit about hosted concept search versus local CLIP inference. | Live Vercel URL, architecture diagrams, API contract, quick start, limitations, social preview, MIT license. |
 
-**Total: 26.5/30 — MANGO bar met provisionally.**
+**Total: 26.5/30 — MANGO bar met. Hire-level portfolio pass.**
 
 ## Critical-defect gate
 
 - No known critical defects in the implementation.
-- Final approval is withheld until the corrected Python 3.11 dependency set passes GitHub Actions.
+- The corrected Python 3.11 dependency set passed the complete [GitHub Actions release gate](https://github.com/aaryabookseller16/Vision-Query/actions/runs/34053896103).
 
 ## Recruiter critique
 
