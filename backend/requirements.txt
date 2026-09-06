@@ -11,11 +11,10 @@
 # - pillow is used to load images from disk safely.
 # - numpy is used for cosine similarity in the in-memory vector store.
 
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-
-torch
-transformers
-pillow
-numpy
-prometheus-client
+fastapi==0.141.1
+numpy==2.5.2
+pillow==12.3.0
+prometheus-client==0.26.0
+torch==2.14.0
+transformers==5.16.1
+uvicorn[standard]==0.52.4

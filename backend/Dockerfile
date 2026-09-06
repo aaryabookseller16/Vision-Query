@@ -1,6 +1,6 @@
 # Use a slim Python base image to keep the container lightweight
 # Slim images reduce attack surface and build time
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Set a working directory inside the container
 # All subsequent commands run from here
@@ -9,10 +9,14 @@ WORKDIR /app
 # Install system-level dependencies required by Python packages
 # - gcc: needed for some Python wheels
 # - libgl1: required by PIL / image processing
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libgl1 \
     && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/app/.cache/huggingface
 
 # Copy dependency list first
 # This allows Docker to cache pip installs unless requirements change

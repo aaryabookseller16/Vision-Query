@@ -1,163 +1,98 @@
-"""
-VisionQuery API (FastAPI)
-
-This module is the orchestration layer for the backend:
-- Exposes HTTP endpoints (/health, /ingest/image, /search, /metrics)
-- Delegates embedding work to app.embeddings.Embedder
-- Stores/searches vectors via app.vector_store.VectorStore
-
-Key production detail:
-- The embedding model is *lazy-loaded* inside Embedder (so the web server can start fast).
-- We expose Prometheus metrics so we can monitor request volume and latency in real time.
-"""
+"""VisionQuery FastAPI orchestration and observability layer."""
 
 from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict
+from pathlib import Path
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from pydantic import BaseModel, Field
 
-# Local modules that handle embeddings and vector search logic
 from app.embeddings import Embedder
 from app.vector_store import VectorStore
 
-
-# -----------------------------
-# Prometheus metrics
-# -----------------------------
-# Total request count by HTTP method + endpoint path
-REQUEST_COUNT = Counter(
-    "http_requests_total",
-    "Total HTTP requests",
-    ["method", "endpoint"],
-)
-
-# Request latency in seconds by endpoint path
-REQUEST_LATENCY = Histogram(
-    "http_request_latency_seconds",
-    "HTTP request latency in seconds",
-    ["endpoint"],
-)
+REQUEST_COUNT = Counter("visionquery_http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+REQUEST_LATENCY = Histogram("visionquery_http_request_latency_seconds", "HTTP request latency", ["endpoint"])
 
 
-# -----------------------------
-# App setup
-# -----------------------------
-app = FastAPI(title="VisionQuery API")
+class ImageIngestRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=512)
 
-# Allow the React dev server (and local browser) to call the API.
-# For production, you'll typically tighten this to your deployed domain.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost",
-        "http://127.0.0.1",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-# The Embedder is responsible for turning images/text into vectors.
-# It should not block server startup (model is lazy-loaded inside Embedder).
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+app = FastAPI(title="VisionQuery API", version="1.0.0")
+origins = [item.strip() for item in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost").split(",") if item.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+
 embedder = Embedder()
-
-# In-memory vector store for similarity search.
-# This can be swapped for FAISS / pgvector / a managed vector DB later.
 store = VectorStore()
+default_image_root = Path(__file__).resolve().parents[2] / "data" / "images"
 
 
-# -----------------------------
-# Middleware: measure every request
-# -----------------------------
+def image_root() -> Path:
+    return Path(os.getenv("IMAGE_ROOT", str(default_image_root))).expanduser().resolve()
+
+
+def resolve_image_path(raw_path: str) -> Path:
+    root = image_root()
+    requested = Path(raw_path)
+    if requested.is_absolute():
+        candidate = requested.resolve()
+    else:
+        parts = requested.parts
+        relative = Path(*parts[2:]) if len(parts) >= 2 and parts[:2] == ("data", "images") else requested
+        candidate = (root / relative).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="image path must stay inside the configured image directory")
+    if not candidate.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="image not found")
+    return candidate
+
+
 @app.middleware("http")
 async def prometheus_middleware(request: Request, call_next):
-    """
-    Capture request count + latency for every endpoint.
-
-    We label metrics by raw URL path (e.g., '/search').
-    If you later add dynamic paths (e.g., '/items/{id}'), consider normalizing labels
-    to avoid high-cardinality metrics.
-    """
     endpoint = request.url.path
     start = time.perf_counter()
-
+    response_status = 500
     try:
         response = await call_next(request)
+        response_status = response.status_code
         return response
     finally:
-        elapsed = time.perf_counter() - start
-        REQUEST_COUNT.labels(request.method, endpoint).inc()
-        REQUEST_LATENCY.labels(endpoint).observe(elapsed)
+        REQUEST_COUNT.labels(request.method, endpoint, str(response_status)).inc()
+        REQUEST_LATENCY.labels(endpoint).observe(time.perf_counter() - start)
 
 
-# -----------------------------
-# Routes
-# -----------------------------
 @app.get("/health")
-def health() -> Dict[str, str]:
-    """Lightweight health check endpoint used by Docker/compose and dev tools."""
-    return {"status": "ok"}
+def health() -> dict[str, object]:
+    return {"status": "ok", "model_loaded": embedder.is_loaded(), "indexed_images": len(store)}
 
 
 @app.get("/metrics")
 def metrics() -> Response:
-    """
-    Prometheus scrape endpoint.
-    Prometheus will GET this URL and ingest the exported metrics.
-    """
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@app.post("/ingest/image")
-def ingest_image(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Ingest an image by:
-      1) Validating the path exists
-      2) Generating an image embedding
-      3) Storing the embedding + minimal metadata in the vector store
-
-    Payload example:
-      { "path": "data/images/dog.jpg" }
-    """
-    image_path = payload.get("path")
-
-    if not image_path:
-        return {"error": "valid image path required"}
-
-    # NOTE: This path is checked inside the container filesystem when running via Docker.
-    if not os.path.exists(image_path):
-        return {"error": f"image path not found: {image_path}"}
-
-    vector = embedder.embed_image(image_path)
-    store.add(vector, {"path": image_path})
-
-    return {"status": "indexed", "path": image_path}
+@app.post("/ingest/image", status_code=status.HTTP_201_CREATED)
+def ingest_image(payload: ImageIngestRequest) -> dict[str, object]:
+    path = resolve_image_path(payload.path)
+    vector = embedder.embed_image(path)
+    public_path = f"data/images/{path.relative_to(image_root()).as_posix()}"
+    store.add(public_path, vector)
+    return {"status": "indexed", "path": public_path, "indexed_images": len(store)}
 
 
 @app.post("/search")
-def search(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Semantic search over indexed images using a text query.
-
-    Payload example:
-      { "query": "a dog", "top_k": 5 }
-    """
-    query = payload.get("query")
-    top_k = int(payload.get("top_k", 5))
-
+def search(payload: SearchRequest) -> dict[str, object]:
+    query = payload.query.strip()
     if not query:
-        return {"error": "query text required"}
-
-    query_vector = embedder.embed_text(query)
-    results = store.search(query_vector, top_k=top_k)
-
-    return {
-        "results": [{"path": meta["path"], "score": float(score)} for score, meta in results]
-    }
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="query cannot be blank")
+    results = store.search(embedder.embed_text(query), top_k=payload.top_k)
+    return {"query": query, "results": [{"path": result.path, "score": result.score} for result in results]}

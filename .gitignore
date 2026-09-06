@@ -18,6 +18,7 @@ __pycache__/
 venv/
 env/
 backend/.venv/
+backend/.venv-test/
 
 # ======================
 # Python tooling

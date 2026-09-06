@@ -1,253 +1,160 @@
 # VisionQuery
 
-**VisionQuery** is a lightweight **text-to-image semantic search** system that serves a pretrained multimodal model behind an API, indexes image embeddings, and returns ranked results via cosine similarity.
+**VisionQuery** is a compact, explainable text-to-image retrieval project. It pairs a tested FastAPI/CLIP service for local inference with a fast, recruiter-friendly visual search showcase deployed on Vercel.
 
-It’s a backend-first MVP focused on **clarity and explainability**: simple vector storage, clean endpoints, containerized dev, and basic observability.
+**Live website:** [vision-query.vercel.app](https://vision-query.vercel.app)
 
----
+![VisionQuery social preview](frontend/public/og.png)
 
-## What it does
+## Why it exists
 
-- **Ingest images** into an embedding index
-- **Embed text + images** into the same CLIP vector space
-- **Search by natural language** and retrieve the most similar images
-- **Expose metrics** for monitoring (Prometheus-compatible)
+File names are poor descriptions of visual ideas. VisionQuery demonstrates how a natural-language phrase can be mapped into the same vector space as an image, then ranked with cosine similarity. The project is deliberately small enough to review in one sitting while still covering model loading, validation, indexing, retrieval, observability, tests, containers, and a polished product surface.
 
----
+## What works
+
+- Index a JPEG, PNG, or other Pillow-supported image from the configured image directory.
+- Generate image and text embeddings with `openai/clip-vit-base-patch32`.
+- Re-index a path idempotently without creating duplicate records.
+- Search the in-memory index and return ranked cosine-similarity scores.
+- Reject malformed payloads, unsafe paths, invalid vectors, and dimension mismatches.
+- Inspect health, model state, index size, request counts, and request latency.
+- Explore a responsive hosted demo with natural-language search, category filters, ranked matches, empty states, and accessible image details.
+
+## Hosted demo versus local model
+
+The [Vercel website](https://vision-query.vercel.app) is a dependable, static showcase over a transparent 10-image concept index. It mirrors the query → rank → inspect product flow without pretending to execute a large ML model in a short-lived browser or serverless function.
+
+The Docker/local API performs the actual CLIP inference described below. Its model is lazy-loaded on the first ingest or search request and cached for the lifetime of the backend process. The image index is intentionally in memory and resets when that process stops.
 
 ## Architecture
 
-### High-level system
-
 ```mermaid
 flowchart LR
-  C[Client<br/>curl / UI] -->|HTTP| API[FastAPI Backend]
-
-  API --> E[CLIP Embedder<br/>text + image]
-  API --> VS[Vector Store<br/>in-memory cosine]
-
-  API -->|/metrics| P[Prometheus]
-  P --> G[Grafana]
-
-  subgraph Data
-    IMG[(Local Images<br/>/data/images)]
-  end
-
-  IMG -->|ingest path| API
-  E -->|embeddings| VS
-  VS -->|top-k results| API
+  Browser[React search showcase] --> Catalog[Curated demo index]
+  Client[API client] --> API[FastAPI]
+  API --> CLIP[CLIP text + image encoder]
+  API --> Index[Thread-safe cosine index]
+  Prometheus -->|scrape /metrics| API
+  Grafana --> Prometheus
+  Images[(data/images)] --> API
 ```
 
-### Request flow
+### Local request flow
 
 ```mermaid
 sequenceDiagram
-  autonumber
-  participant U as User
+  participant U as Client
   participant A as FastAPI
-  participant M as CLIP Embedder
-  participant V as Vector Store
-
-  U->>A: POST /ingest/image (path)
-  A->>M: embed(image)
-  M-->>A: image_embedding
-  A->>V: add(image_embedding, metadata)
-  A-->>U: {status: ok}
-
-  U->>A: POST /search (query, top_k)
-  A->>M: embed(text)
-  M-->>A: text_embedding
-  A->>V: cosine_search(text_embedding, top_k)
-  V-->>A: ranked_results
-  A-->>U: results + similarity scores
+  participant E as CLIP embedder
+  participant V as Vector store
+  U->>A: POST /ingest/image
+  A->>A: Validate path boundary
+  A->>E: Embed image
+  E-->>A: Normalized-compatible vector
+  A->>V: Add or replace by path
+  U->>A: POST /search
+  A->>E: Embed text
+  A->>V: Rank by cosine similarity
+  V-->>U: Paths + scores
 ```
 
----
+## Quick start
 
-## Tech stack
+### One-command Docker demo
 
-- **API:** FastAPI
-- **Embeddings:** pretrained CLIP (text + image)
-- **Search:** in-memory vector store (cosine similarity)
-- **Observability:** Prometheus + Grafana
-- **Infra:** Docker + Docker Compose
-
----
-
-## Repository layout
-
-> This is the *meaningful* layout (excluding `node_modules/`, build artifacts, etc.).
-
-```text
-VisionQuery/
-├── backend/
-│   ├── app/
-│   │   ├── main.py          # API routes + orchestration + metrics
-│   │   ├── embeddings.py    # CLIP embedding (text + image)
-│   │   └── vector_store.py  # in-memory similarity search
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/                # optional React UI
-├── data/
-│   └── images/              # local images (not tracked)
-├── monitoring/
-│   └── prometheus/
-│       └── prometheus.yml   # Prometheus scrape config
-├── docker-compose.yml
-└── README.md
-```
-
----
-
-## API
-
-### Health
-`GET /health`
-
-Returns a simple status payload for Docker + monitoring checks.
-
-### Ingest image
-`POST /ingest/image`
-
-Body:
-
-```json
-{ "path": "data/images/example.jpg" }
-```
-
-Embeds the image and stores its vector + metadata in the in-memory index.
-
-### Search
-`POST /search`
-
-Body:
-
-```json
-{ "query": "a red car on the street", "top_k": 5 }
-```
-
-Returns the top-k most similar images with cosine similarity scores.
-
-### Metrics
-`GET /metrics`
-
-Prometheus-compatible metrics (request counts, latency).
-
----
-
-## Quickstart (Docker)
-
-### Prerequisites
-
-- Docker
-- Docker Compose
-
-### Run everything
-
-From the repo root:
+Requirements: Docker with Compose and enough disk space for PyTorch plus the CLIP model.
 
 ```bash
-docker compose up --build
+make demo
 ```
 
-### Services
+Then open:
 
-- **Backend API:** http://localhost:8000
-- **Frontend UI:** http://localhost:5173
-- **Prometheus:** http://localhost:9090
-- **Grafana:** http://localhost:3000 (default: admin / admin)
+- Website: <http://localhost:5173>
+- API documentation: <http://localhost:8000/docs>
+- Prometheus: <http://localhost:9090>
+- Grafana: <http://localhost:3000> (`admin` / `admin` for local development)
 
-### Stop
+Grafana starts with Prometheus already configured as its default data source.
 
-```bash
-docker compose down
-```
+### Index and search
 
-### Reset (including volumes)
-
-```bash
-docker compose down -v
-```
-
----
-
-## Local development (without Docker)
-
-> Docker is recommended for consistent infra. Use local runs for faster iteration.
-
-### Backend
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Frontend (optional)
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## Usage examples
-
-### Ingest an image
+Put an image at `data/images/example.jpg`, then run:
 
 ```bash
 curl -X POST http://localhost:8000/ingest/image \
   -H "Content-Type: application/json" \
   -d '{"path":"data/images/example.jpg"}'
-```
 
-### Search
-
-```bash
 curl -X POST http://localhost:8000/search \
   -H "Content-Type: application/json" \
   -d '{"query":"a dog on a beach","top_k":5}'
 ```
 
----
+The first model-backed request downloads and initializes CLIP, so it is slower than subsequent requests.
 
-## Notes and design choices
+## API contract
 
-- **Lazy model loading**: the CLIP model loads on first request to keep container startup fast and health checks reliable.
-- **In-memory index**: simple to understand and easy to swap later (FAISS / pgvector).
-- **Backend-first**: the core deliverable is a clean API and system design; the UI is optional.
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Service, model-load, and index status |
+| `GET` | `/metrics` | Prometheus exposition format |
+| `POST` | `/ingest/image` | Validate, embed, and index one local image |
+| `POST` | `/search` | Return the top 1–20 semantic matches |
 
----
+The API only reads images inside `IMAGE_ROOT` (default: the repository's `data/images` directory). Production browser origins can be supplied as a comma-separated `CORS_ALLOWED_ORIGINS` value.
 
-## Limitations (intentional)
+## Development and verification
 
-- Index resets on restart (no persistent vector store)
-- No authentication / access control
-- No batching or async inference
-- Not tuned for large-scale indexing
+Run every release gate with:
 
-These tradeoffs keep the system small, explainable, and interview-friendly.
+```bash
+make check
+```
 
----
+This executes:
 
-## Possible extensions
+- Frontend lint, 5 search tests, production build, and runtime dependency audit.
+- 11 backend API/vector tests without downloading the CLIP weights.
+- Docker Compose configuration validation.
 
-- Replace the in-memory store with **FAISS** or **pgvector**
-- Persist metadata + vectors in a database
-- Add image upload support (instead of file paths)
-- Add tracing + richer dashboards
-- Batch embedding + async job queue for higher throughput
+GitHub Actions runs the same frontend and backend gates on every push and pull request.
 
----
+## Repository map
 
-## References
+```text
+backend/
+  app/                 FastAPI, lazy CLIP adapter, vector store
+  tests/               API and retrieval unit tests
+frontend/
+  public/gallery/      Local demo image collection
+  src/                 React experience and tested search logic
+monitoring/
+  prometheus/          Scrape configuration
+  grafana/             Provisioned Prometheus data source
+data/images/           Local images (ignored by Git)
+docker-compose.yml     Full local stack
+Makefile               Demo and quality workflows
+```
 
-- CLIP (OpenAI): Learning Transferable Visual Models From Natural Language Supervision
-- FastAPI documentation
-- Prometheus instrumentation + exposition formats
-- Grafana documentation
-- Docker Compose documentation
+## Design and engineering decisions
+
+- **Lazy model loading:** health checks stay responsive before large model initialization.
+- **Safe file boundary:** ingest requests cannot escape the configured image directory.
+- **Idempotent paths:** re-ingesting an image replaces its vector instead of duplicating it.
+- **In-memory index:** keeps the algorithm easy to inspect; FAISS or pgvector is the natural scale-up path.
+- **Static production showcase:** gives recruiters an immediate, reliable product experience while keeping claims about CLIP execution precise.
+- **No authentication:** appropriate for the local demonstration API; it should not be exposed as a public multi-tenant upload service.
+
+## Limitations and next steps
+
+- The local index is process-scoped and not designed for large collections.
+- CPU inference is intentionally slower than GPU inference.
+- The hosted concept index is a product demonstration, not a CLIP benchmark.
+- A production service would add object storage, a persistent vector database, authentication, rate limits, queued ingestion, and model-serving infrastructure.
+
+Demo photography is sourced from [Unsplash](https://unsplash.com/license) and stored locally for a stable review experience.
+
+## License
+
+MIT
