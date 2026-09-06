@@ -120,6 +120,8 @@ This executes:
 
 GitHub Actions runs the same frontend and backend gates on every push and pull request.
 
+The committed [MANGO recruiter scorecard](docs/RECRUITER_SCORECARD.md) records the final quality, architecture, product-design, and deployment judgment.
+
 ## Repository map
 
 ```text
